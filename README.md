@@ -139,6 +139,8 @@ partial interface CaptureController {
 
 ## Proposal documents
 
+- [WICG/proposals#318](https://github.com/WICG/proposals/issues/318) - WICG Web Platform API incubation thread
+- [w3c/webdriver-bidi#1211](https://github.com/w3c/webdriver-bidi/issues/1211) - W3C WebDriver BiDi protocol proposal thread
 - [EXPLAINER.md](./EXPLAINER.md) - Problem motivation, Web API design, WebDriver BiDi integration, and alternatives considered
 - [spec.bs](./spec.bs) - Draft Bikeshed specification (WebIDL + CDDL + normative algorithms)
 - [security-privacy-questionnaire.md](./security-privacy-questionnaire.md) - W3C TAG Security & Privacy Self-Review
