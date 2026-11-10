@@ -1,0 +1,119 @@
+<pre class='metadata'>
+Title: Device-Framed Viewport Capture
+Shortname: device-framed-capture
+Level: 1
+Status: CG-DRAFT
+Group: wicg
+Repository: hemanth/device-framed-capture
+URL: https://hemanth.github.io/device-framed-capture/
+Editor: Hemanth HM, https://h3manth.com, hemanth.hm@gmail.com
+Abstract: This specification extends {{CaptureController}} from Screen Capture with declarative physical screen occlusion masking (corner radii, camera cutouts, foldable hinges) and vendor-neutral device-frame composition, and defines companion hooks for W3C WebDriver BiDi.
+Markup Shorthands: markdown yes, css no
+</pre>
+
+Introduction {#intro}
+=====================
+
+*This section is non-normative.*
+
+Viewport Capture [[mediacapture-viewport]] and Element Capture [[element-capture]] allow web applications to capture live video streams of the current tab or a specific DOM subtree. However, captured video frames always represent an unclipped rectangular surface, omitting physical screen corner radii, display cutouts, foldable hinges, and form-factor framing.
+
+This specification extends {{CaptureController}} with {{CaptureController/setDeviceFrame()}} so applications and browser automation protocols [[webdriver-bidi]] can composite physical screen masks and vendor-neutral form-factor frames directly in the user agent's capture pipeline.
+
+WebIDL Extensions to CaptureController {#capture-controller-extensions}
+=======================================================================
+
+<pre class="idl">
+enum CaptureFramingMode {
+  "none",
+  "occlusions",
+  "device"
+};
+
+enum DeviceFormFactor {
+  "phone",
+  "foldable",
+  "feature-phone",
+  "tablet",
+  "notebook",
+  "smart-display",
+  "watch",
+  "desktop"
+};
+
+enum DisplayCutoutShape {
+  "pill",
+  "circle",
+  "notch",
+  "rectangle"
+};
+
+enum CaptureRotationBehavior {
+  "resize",
+  "contain"
+};
+
+dictionary DisplayCutoutInit {
+  required DisplayCutoutShape shape;
+  required unsigned long x;
+  required unsigned long y;
+  required unsigned long width;
+  required unsigned long height;
+  unsigned long borderRadius = 0;
+};
+
+dictionary DisplayHingeInit {
+  required DOMString orientation;
+  required unsigned long offset;
+  required unsigned long maskLength;
+};
+
+dictionary DeviceFrameConfiguration {
+  CaptureFramingMode mode = "device";
+  DeviceFormFactor formFactor = "phone";
+  (unsigned long or sequence<unsigned long>) cornerRadius = 0;
+  sequence<DisplayCutoutInit> cutouts = [];
+  DisplayHingeInit? hinge = null;
+  CaptureRotationBehavior rotationBehavior = "contain";
+  DOMString stageBackground = "#f1f3f4";
+};
+
+partial interface CaptureController {
+  Promise<undefined> setDeviceFrame(optional DeviceFrameConfiguration? configuration = null);
+};
+</pre>
+
+## Processing Model for `setDeviceFrame()` ## {#set-device-frame-algorithm}
+
+<div algorithm>
+When {{CaptureController/setDeviceFrame(configuration)}} is invoked on a {{CaptureController}} |controller|, the user agent MUST run the following steps:
+
+1. Let |p| be [=a new promise=].
+1. If |controller| is not bound to an active display or viewport capture session, [=reject=] |p| with an "{{InvalidStateError}}" {{DOMException}} and return |p|.
+1. If |configuration| is `null` or |configuration|["`mode`"] is `"none"`:
+   1. Clear any active device-frame stage lock and occlusion mask on |controller|'s capture pipeline.
+   1. [=Resolve=] |p| with `undefined` and return |p|.
+1. Validate |configuration|:
+   1. If |configuration|["`cornerRadius`"] is a sequence whose length is not `4`, [=reject=] |p| with a {{TypeError}} and return |p|.
+   1. If |configuration|["`hinge`"] is non-null and |configuration|["`hinge`"]["`orientation`"] is neither `"vertical"` nor `"horizontal"`, [=reject=] |p| with a {{TypeError}} and return |p|.
+1. Queue a task on the capture pipeline to apply |configuration| to all subsequent video frames emitted by |controller|'s video track:
+   1. Clip the captured surface to |configuration|["`cornerRadius`"].
+   1. Composite each cutout in |configuration|["`cutouts`"] and any non-null |configuration|["`hinge`"] over the clipped surface.
+   1. If |configuration|["`mode`"] is `"device"`:
+      1. Composite a vendor-neutral chassis corresponding to |configuration|["`formFactor`"] over a stage filled with |configuration|["`stageBackground`"].
+      1. Round output frame width and height up to even integers (`2n`).
+      1. If |configuration|["`rotationBehavior`"] is `"contain"`, lock the output canvas `(width, height)` on first activation and scale subsequent aspect-ratio changes to fit cleanly inside the locked stage.
+1. [=Resolve=] |p| with `undefined`.
+1. Return |p|.
+</div>
+
+WebDriver BiDi Integration Hooks {#webdriver-bidi-hooks}
+========================================================
+
+For [[webdriver-bidi]], user agents implementing `emulation.setDisplayFeaturesOverride` and the `framing` parameter (`"none"` | `"occlusions"` | `"device"`) on `browsingContext.captureScreenshot` and `browsingContext.startScreencast` MUST apply the same occlusion-masking and `2n` stage-framing rules defined in [[#set-device-frame-algorithm]] using the active browsing context's emulated display features.
+
+Security and Privacy Considerations {#security-privacy}
+=======================================================
+
+* `setDeviceFrame()` consumes synthetic geometry supplied by the caller and MUST NOT expose physical host display cutouts, corner radii, or OEM hardware identifiers.
+* `setDeviceFrame()` operates strictly post-capture on frames already authorized by the user's `getViewportMedia()` or `getDisplayMedia()` grant and after any `CropTarget` or `RestrictionTarget` isolation masks have been applied.
